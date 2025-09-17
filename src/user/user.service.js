@@ -82,7 +82,7 @@ const loginUser = async (email, password) => {
       role: user.role
     },
     process.env.JWT_SECRET,
-    { expiresIn: '24h' }
+    { expiresIn: '1h' } // Changed from 24h to 1h for better security
   );
 
   // Return user data without password
@@ -128,11 +128,29 @@ const deleteUserById = async (id) => {
   await deleteUser(id);
 };
 
+const updateUserProfileImage = async (userId, imagePath) => {
+  if (typeof userId !== "number") {
+    throw Error("User ID is not a number");
+  }
+
+  if (!imagePath) {
+    throw Error("Image path is required");
+  }
+
+  // Check if user exists
+  await getUserById(userId);
+
+  // Update user with new profile image path
+  const updatedUser = await editUser(userId, { profileImage: imagePath });
+  return updatedUser;
+};
+
 module.exports = {
   getAllUsers,
   getUserById,
   registerUser,
   loginUser,
   updateUser,
-  deleteUserById
+  deleteUserById,
+  updateUserProfileImage
 };

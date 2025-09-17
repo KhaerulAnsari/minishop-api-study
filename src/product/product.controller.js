@@ -5,6 +5,7 @@ const express = require("express");
 const prisma = require("../db/index");
 const { sendError, sendSuccess } = require("../utils/response");
 const { authenticateToken } = require("../middleware/auth");
+const { uploadProductImages, uploadSingleProductImage, handleUploadError } = require("../middleware/upload");
 const {
   getAllProduct,
   getProductbyId,
@@ -18,7 +19,7 @@ const {
 const router = express.Router();
 
 router.get("/", async (req, res) => {
-  const products = await getAllProduct();
+  const products = await getAllProduct(req);
 
   return sendSuccess(res, 200, "Products retrieved successfully", products);
 });
@@ -27,7 +28,7 @@ router.get("/", async (req, res) => {
 router.get("/my-products", authenticateToken, async (req, res) => {
   try {
     const userId = parseInt(req.user.userId);
-    const products = await getProductsByUserId(userId);
+    const products = await getProductsByUserId(userId, req);
 
     return sendSuccess(res, 200, "Your products retrieved successfully", products);
   } catch (error) {
@@ -39,7 +40,7 @@ router.get("/my-products", authenticateToken, async (req, res) => {
 router.get("/user/:userId", async (req, res) => {
   try {
     const userId = parseInt(req.params.userId);
-    const products = await getProductsByUserId(userId);
+    const products = await getProductsByUserId(userId, req);
 
     return sendSuccess(res, 200, "User products retrieved successfully", products);
   } catch (error) {
@@ -51,7 +52,7 @@ router.get("/:id", async (req, res) => {
   try {
     const productId = parseInt(req.params.id);
 
-    const product = await getProductbyId(productId);
+    const product = await getProductbyId(productId, req);
 
     return sendSuccess(res, 200, "Produk berhasil diambil", product);
   } catch (error) {
@@ -59,32 +60,60 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-router.post("/", authenticateToken, async (req, res) => {
-  try {
-    const newProduct = req.body;
-    const userId = parseInt(req.user.userId);
+router.post("/", authenticateToken, (req, res) => {
+  uploadProductImages(req, res, async (err) => {
+    if (err) {
+      return handleUploadError(err, req, res, () => {});
+    }
 
-    const product = await createProduct(newProduct, userId);
+    try {
+      const newProduct = req.body;
+      const userId = parseInt(req.user.userId);
 
-    return sendSuccess(res, 201, "Create product success", product);
-  } catch (error) {
-    return sendError(res, 400, error.message);
-  }
+      const product = await createProduct(newProduct, userId, req.files);
+
+      return sendSuccess(res, 201, "Create product success", product);
+    } catch (error) {
+      // Cleanup uploaded files if product creation fails
+      if (req.files && req.files.length > 0) {
+        const { deleteImages } = require('../middleware/upload');
+        const filePaths = req.files.map(file => `/uploads/products/${file.filename}`);
+        console.log('Product creation failed, cleaning up uploaded files:', filePaths);
+        deleteImages(filePaths);
+      }
+
+      return sendError(res, 400, error.message);
+    }
+  });
 });
 
-router.put("/:id", authenticateToken, async (req, res) => {
-  try {
-    const newProduct = req.body;
-    const productId = parseInt(req.params.id);
-    const userId = parseInt(req.user.userId);
-    const userRole = req.user.role;
+router.put("/:id", authenticateToken, (req, res) => {
+  uploadProductImages(req, res, async (err) => {
+    if (err) {
+      return handleUploadError(err, req, res, () => {});
+    }
 
-    const product = await updateProduct(productId, newProduct, userId, userRole);
+    try {
+      const newProduct = req.body;
+      const productId = parseInt(req.params.id);
+      const userId = parseInt(req.user.userId);
+      const userRole = req.user.role;
 
-    return sendSuccess(res, 200, "Update product success", product);
-  } catch (error) {
-    return sendError(res, 400, error.message);
-  }
+      const product = await updateProduct(productId, newProduct, userId, userRole, req.files);
+
+      return sendSuccess(res, 200, "Update product success", product);
+    } catch (error) {
+      // Cleanup new uploaded files if update fails
+      if (req.files && req.files.length > 0) {
+        const { deleteImages } = require('../middleware/upload');
+        const filePaths = req.files.map(file => `/uploads/products/${file.filename}`);
+        console.log('Product update failed, cleaning up new uploaded files:', filePaths);
+        deleteImages(filePaths);
+      }
+
+      return sendError(res, 400, error.message);
+    }
+  });
 });
 
 router.patch("/:id", authenticateToken, async (req, res) => {

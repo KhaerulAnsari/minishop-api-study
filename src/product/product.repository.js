@@ -46,6 +46,7 @@ const insertProduct = async (productData) => {
       description: productData.description,
       price: productData.price,
       image: productData.image,
+      images: productData.images, // Add images field
       userId: productData.userId,
     },
     include: {
@@ -80,6 +81,7 @@ const editProduct = async (id, productData) => {
       description: productData.description,
       price: productData.price,
       image: productData.image,
+      images: productData.images, // Add images field
     },
     include: {
       user: {

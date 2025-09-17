@@ -1,13 +1,15 @@
 const express = require('express');
 const { sendError, sendSuccess } = require('../utils/response');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
+const { uploadProfileImage, handleUploadError } = require('../middleware/upload');
 const {
   getAllUsers,
   getUserById,
   registerUser,
   loginUser,
   updateUser,
-  deleteUserById
+  deleteUserById,
+  updateUserProfileImage
 } = require('./user.service');
 
 const router = express.Router();
@@ -53,6 +55,33 @@ router.put('/profile', authenticateToken, async (req, res) => {
   } catch (error) {
     return sendError(res, 400, error.message);
   }
+});
+
+// Upload profile image
+router.post('/profile/upload-image', authenticateToken, (req, res) => {
+  uploadProfileImage(req, res, async (err) => {
+    if (err) {
+      return handleUploadError(err, req, res, () => {});
+    }
+
+    try {
+      if (!req.file) {
+        return sendError(res, 400, 'No image file provided');
+      }
+
+      const userId = parseInt(req.user.userId);
+      const imagePath = `/uploads/profiles/${req.file.filename}`;
+
+      const updatedUser = await updateUserProfileImage(userId, imagePath);
+
+      return sendSuccess(res, 200, 'Profile image uploaded successfully', {
+        user: updatedUser,
+        imageUrl: `${req.protocol}://${req.get('host')}${imagePath}`
+      });
+    } catch (error) {
+      return sendError(res, 400, error.message);
+    }
+  });
 });
 
 // Admin only routes
